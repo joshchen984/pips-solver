@@ -8,19 +8,25 @@ from ortools.sat.python import cp_model
 
 d = 10
 n = d * 2
+directions = [(0, 1), (0, -1), (-1, 0), (1, 0)]
+
+
+def empty_adjacent_cells(board, r, c):
+    adj = []
+    for (dr, dc) in directions:
+        if 0 <= r + dr < n and 0 <= c + dc < n and not board[r + dr][c + dc]:
+            adj.append((r + dr, c + dc))
+    return adj
+
 
 def get_edge_cells(board):
     edges = set()
     for i in range(n):
         for j in range(n):
             if board[i][j]:
-                for (dr, dc) in [(0, 1), (0, -1), (-1, 0), (1, 0)]:
-                    if 0 <= i + dr < n and 0 <= j + dc < n and not board[i + dr][j + dc]:
-                        edges.add((i + dr, j + dc))
+                edges.update(empty_adjacent_cells(board, i, j))
     return edges
 
-def is_white_cell(r, c):
-    return (r + c) % 2 == 0
 
 
 def create_board_shape():
@@ -29,17 +35,12 @@ def create_board_shape():
     board[n//2][n//2] = True
     board[n//2][n//2 - 1] =  True
 
-    print(is_white_cell(0, 0))
     for i in range(d - 1):
-        edge_cells = get_edge_cells(board)
-
-        white_cells =  [(r, c) for (r, c) in edge_cells if is_white_cell(r, c)]
-        black_cells =  [(r, c) for (r, c) in edge_cells if not is_white_cell(r, c)]
-
-        (white_row, white_col) = random.choice(white_cells)
-        (black_row, black_col) = random.choice(black_cells)
-        board[white_row][white_col] = True
-        board[black_row][black_col] = True
+        edge_cells = list(get_edge_cells(board))
+        (r, c) = random.choice(edge_cells)
+        board[r][c] = True
+        (r2, c2) = random.choice(empty_adjacent_cells(board, r, c))
+        board[r2][c2] = True
     return board
 
 def get_board_cells(board):
