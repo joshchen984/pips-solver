@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Set, Tuple
 from constraint import Constraint, Eq, Neq, Sum, Lt, Gt
+from ortools.sat.python import cp_model
 
 
 d = 10
@@ -92,7 +93,79 @@ for region in regions:
     if random.random() < 0.15:
         region.constraint = Eq
 
+
+# Assigning pips
+def assign_cell_values(regions):
+    board =  [[None for _ in range(n)] for _ in range(n)]
+
+    for region in regions:
+        if region.constraint == Eq:
+            eq_cell_value = random.randint(0, 6)
+            for (r, c) in region.cells:
+                board[r][c] = eq_cell_value 
+        else:
+            for (r, c) in region.cells:
+                board[r][c] = random.randint(0, 6)
+    return board
+
+cell_value_board = assign_cell_values(regions)
+
+for i in cell_value_board:
+    for j in i:
+        if j is None:
+            print(" ", end = "")
+        else:
+            print(j, end = "")
+    print()
+
+# Creating dominos
 dominos = []
+model = cp_model.CpModel()
+# horizontal
+for r in range(n):
+    for c in range(n - 1):
+        var = model.NewBoolVar(f'h_{r}_{c}')
+        dominos.append((var, [(r,c), (r, c + 1)]))
+
+# vertical 
+for r in range(n - 1):
+    for c in range(n):
+        var = model.NewBoolVar(f'v_{r}_{c}')
+        dominos.append((var, [(r,c), (r + 1, c)]))
+
+cells = {cell for region in regions for cell in region.cells}
+for (r, c) in cells:
+    dominos_over_cell = [var for var, domino_cells in dominos if (r, c) in
+                         domino_cells and all([domino_cell in cells for domino_cell in
+                                               domino_cells])]
+    model.Add(sum(dominos_over_cell) == 1)
+
+valid_dominos = []
+placed_dominos =  [[0 for _ in range(n)] for _ in range(n)]
+solver = cp_model.CpSolver()
+status = solver.Solve(model)
+if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
+    domino_id = 1
+    for var, cells in dominos:
+        if solver.Value(var):
+            domino = []
+            for r, c in cells:
+                domino.append(cell_value_board[r][c])
+                placed_dominos[r][c] = domino_id
+
+            valid_dominos.append(tuple(domino))
+            domino_id += 1
+                
+print(valid_dominos)
+for i in placed_dominos:
+    for j in i:
+        if j is None:
+            print(" ", end = "")
+        else:
+            print(j, end = "")
+    print()
+#           
+
 
 
 def print_board():
