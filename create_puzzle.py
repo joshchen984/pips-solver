@@ -2,7 +2,7 @@ import random
 from dataclasses import dataclass
 from enum import Enum
 from typing import Set, Tuple
-from constraint import Constraint, Eq, Neq, Sum, Lt, Gt
+from constraint import Constraint, Eq, Neq, Sum, Lt, Gt, NoConstraint 
 from ortools.sat.python import cp_model
 
 
@@ -62,7 +62,6 @@ def get_region_cells(start_cell, available_cells, size):
     cells = {start_cell}
     available_cells.remove(start_cell)
     stack = [start_cell]
-    directions = [(0, 1), (0, -1), (-1, 0), (1, 0)]
     while stack:
         (i, j) = stack.pop()
         random.shuffle(directions)
@@ -92,7 +91,7 @@ while unassigned_cells:
 # equality constraint
 for region in regions:
     if random.random() < 0.15:
-        region.constraint = Eq
+        region.constraint = Eq()
 
 
 # Assigning pips
@@ -100,7 +99,7 @@ def assign_cell_values(regions):
     board =  [[None for _ in range(n)] for _ in range(n)]
 
     for region in regions:
-        if region.constraint == Eq:
+        if type(region.constraint) == Eq:
             eq_cell_value = random.randint(0, 6)
             for (r, c) in region.cells:
                 board[r][c] = eq_cell_value 
@@ -111,6 +110,7 @@ def assign_cell_values(regions):
 
 cell_value_board = assign_cell_values(regions)
 
+"""
 for i in cell_value_board:
     for j in i:
         if j is None:
@@ -118,6 +118,22 @@ for i in cell_value_board:
         else:
             print(j, end = "")
     print()
+"""
+
+
+def add_constraints(regions):
+    for region in regions:
+        if region.constraint is None:
+            region_sum = 0
+            for (r, c) in region.cells:
+                region_sum += cell_value_board[r][c]
+            region.constraint = Constraint.create_random(region_sum,
+                                                         constraints = [Neq,
+                                                                        Sum,
+                                                                        Lt, Gt,
+                                                                        NoConstraint])
+
+add_constraints(regions)
 
 # Creating dominos
 dominos = []
@@ -156,27 +172,46 @@ if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
 
             valid_dominos.append(tuple(domino))
             domino_id += 1
-                
-print(valid_dominos)
-for i in placed_dominos:
-    for j in i:
-        if j is None:
-            print(" ", end = "")
-        else:
-            print(j, end = "")
-    print()
-#           
 
-
-
-def print_board():
+def encode_board():
+    lines = []
     board =  [["." for _ in range(n)] for _ in range(n)]
     for i, region in enumerate(regions):
         for (r, c) in region.cells:
-            board[r][c] = chr(i + ord('A'))
+            if type(region.constraint) is NoConstraint:
+                board[r][c] = '#'
+            else:
+                board[r][c] = chr(i + ord('A'))
+
     for i in board:
+        line = []
         for j in i:
-            print(j, end = "")
-        print()
-# print(board)
-print_board()
+            line.append(j)
+        lines.append("".join(line))
+    return "\n".join(lines)
+
+def encode():
+    lines = []
+    lines.append(str(n))
+
+    lines.append(encode_board())
+    num_constraints = sum(1 for region in regions if type(region.constraint) is not
+                          NoConstraint)
+    lines.append(str(num_constraints))
+    for i, region in enumerate(regions):
+        if type(region.constraint) is not NoConstraint:
+            lines.append(chr(ord('A') + i) + " " + str(region.constraint))
+    lines.append(str(d))
+    for domino in valid_dominos:
+        lines.append(f"{domino[0]} {domino[1]}")
+    return "\n".join(lines)
+
+def print_puzzle():
+   print(encode()) 
+
+def write_puzzle(path):
+    with open(path, "w") as f:
+        f.write(encode())
+
+print_puzzle()
+write_puzzle("text.txt")
