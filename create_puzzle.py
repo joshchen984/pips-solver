@@ -6,8 +6,8 @@ from constraint import Constraint, Eq, Neq, Sum, Lt, Gt, NoConstraint
 from ortools.sat.python import cp_model
 
 
-d = 10
-n = d * 2
+num_dominos = 10
+n = num_dominos * 2
 directions = [(0, 1), (0, -1), (-1, 0), (1, 0)]
 
 
@@ -35,7 +35,7 @@ def create_board_shape():
     board[n//2][n//2] = True
     board[n//2][n//2 - 1] =  True
 
-    for i in range(d - 1):
+    for i in range(num_dominos - 1):
         edge_cells = list(get_edge_cells(board))
         (r, c) = random.choice(edge_cells)
         board[r][c] = True
@@ -90,7 +90,7 @@ while unassigned_cells:
 
 # equality constraint
 for region in regions:
-    if random.random() < 0.15:
+    if len(region.cells) > 1 and random.random() < 0.15:
         region.constraint = Eq()
 
 
@@ -201,7 +201,7 @@ def encode():
     for i, region in enumerate(regions):
         if type(region.constraint) is not NoConstraint:
             lines.append(chr(ord('A') + i) + " " + str(region.constraint))
-    lines.append(str(d))
+    lines.append(str(num_dominos))
     for domino in valid_dominos:
         lines.append(f"{domino[0]} {domino[1]}")
     return "\n".join(lines)
