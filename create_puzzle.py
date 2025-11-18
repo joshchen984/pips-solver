@@ -6,7 +6,7 @@ from constraint import Constraint, Eq, Neq, Sum, Lt, Gt, NoConstraint
 from ortools.sat.python import cp_model
 
 
-num_dominos = 20
+num_dominos = 10
 n = num_dominos * 2
 directions = [(0, 1), (0, -1), (-1, 0), (1, 0)]
 
