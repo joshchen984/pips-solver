@@ -31,6 +31,7 @@ def get_edge_cells(board):
 def create_board_shape(num_dominos):
     n = num_dominos * 4
     board = [[False for _ in range(n)] for _ in range(n)]
+    dominos = [((n // 2, n // 2), (n // 2, n // 2 - 1))]
     # initial domino
     board[n // 2][n // 2] = True
     board[n // 2][n // 2 - 1] = True
@@ -44,8 +45,9 @@ def create_board_shape(num_dominos):
             (r2, c2) = random.choice(empty_adj)
             board[r][c] = True
             board[r2][c2] = True
+            dominos.append(((r, c), (r2, c2)))
             dominos_fit += 1
-    return board
+    return board, dominos
 
 
 def get_board_cells(board):
@@ -147,48 +149,12 @@ def add_constraints(regions, cell_value_board, constraints=None, probs=None):
             )
 
 
-def get_dominos(regions, cell_value_board, n):
-    # Creating dominos
-    dominos = []
-    model = cp_model.CpModel()
-    # horizontal
-    for r in range(n):
-        for c in range(n - 1):
-            var = model.NewBoolVar(f"h_{r}_{c}")
-            dominos.append((var, [(r, c), (r, c + 1)]))
-
-    # vertical
-    for r in range(n - 1):
-        for c in range(n):
-            var = model.NewBoolVar(f"v_{r}_{c}")
-            dominos.append((var, [(r, c), (r + 1, c)]))
-
-    cells = {cell for region in regions for cell in region.cells}
-    for r, c in cells:
-        dominos_over_cell = [
-            var
-            for var, domino_cells in dominos
-            if (r, c) in domino_cells
-            and all([domino_cell in cells for domino_cell in domino_cells])
-        ]
-        model.Add(sum(dominos_over_cell) == 1)
-
+def get_dominos(domino_positions, cell_value_board, n):
     valid_dominos = []
-    placed_dominos = [[0 for _ in range(n)] for _ in range(n)]
-    solver = cp_model.CpSolver()
-    status = solver.Solve(model)
-    if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
-        domino_id = 1
-        for var, cells in dominos:
-            if solver.Value(var):
-                domino = []
-                for r, c in cells:
-                    domino.append(cell_value_board[r][c])
-                    placed_dominos[r][c] = domino_id
+    for (r1, c1), (r2, c2) in domino_positions:
+        valid_dominos.append((cell_value_board[r1][c1], cell_value_board[r2][c2]))
 
-                valid_dominos.append(tuple(domino))
-                domino_id += 1
-        return valid_dominos
+    return valid_dominos
 
 
 @dataclass
@@ -218,12 +184,12 @@ def create_puzzle(
 
     n = num_dominos * 4
     region_sizes = [1, 2, 3, 4]
-    board = create_board_shape(num_dominos)
+    board, domino_positions = create_board_shape(num_dominos)
     regions = get_regions(board, region_sizes)
     set_equality_constraints(regions, eq_prob)
     cell_value_board = assign_cell_values(regions, n, min_pip, max_pip)
     add_constraints(regions, cell_value_board, constraints, probs)
-    valid_dominos = get_dominos(regions, cell_value_board, n)
+    valid_dominos = get_dominos(domino_positions, cell_value_board, n)
     return Puzzle(num_dominos, regions, valid_dominos)
 
 
