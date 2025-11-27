@@ -97,36 +97,38 @@ def get_regions(board: list[list[bool]], region_sizes):
     return regions
 
 
-def set_equality_constraints(regions):
+def set_equality_constraints(regions, eq_prob):
     # equality constraint
     for region in regions:
-        if len(region.cells) > 1 and random.random() < 0.15:
+        if eq_prob == 1 or (len(region.cells) > 1 and random.random() < eq_prob):
             region.constraint = Eq()
 
 
 # Assigning pips
-def assign_cell_values(regions, n):
+def assign_cell_values(regions, n, min_pip=0, max_pip=6):
     board = [[None for _ in range(n)] for _ in range(n)]
 
     for region in regions:
         if type(region.constraint) == Eq:
-            eq_cell_value = random.randint(0, 6)
+            eq_cell_value = random.randint(min_pip, max_pip)
             for r, c in region.cells:
                 board[r][c] = eq_cell_value
         else:
             for r, c in region.cells:
-                board[r][c] = random.randint(0, 6)
+                board[r][c] = random.randint(min_pip, max_pip)
     return board
 
 
-def add_constraints(regions, cell_value_board):
+def add_constraints(regions, cell_value_board, constraints=None, probs=None):
+    if constraints is None:
+        constraints = [Neq, Sum, Lt, Gt, NoConstraint]
     for region in regions:
         if region.constraint is None:
             region_sum = 0
             for r, c in region.cells:
                 region_sum += cell_value_board[r][c]
             region.constraint = Constraint.create_random(
-                region_sum, constraints=[Neq, Sum, Lt, Gt, NoConstraint]
+                region_sum, constraints=constraints, probs=probs
             )
 
 
@@ -181,14 +183,31 @@ class Puzzle:
     valid_dominos: list[Tuple[int, int]]
 
 
-def create_puzzle(num_dominos, region_sizes):
+def create_puzzle(
+    num_dominos, region_sizes, constraints=None, probs=None, min_pip=0, max_pip=6
+):
+    if constraints is None:
+        constraints = [Eq, Neq, Sum, Lt, Gt, NoConstraint]
+    try:
+        eq_index = constraints.index(Eq)
+    except ValueError:
+        eq_index = -1
+    if eq_index == -1:
+        eq_prob = 0
+    else:
+        if probs is None:
+            eq_prob = 1 / len(constraints)
+        else:
+            eq_prob = probs.pop(eq_index)
+        constraints.pop(eq_index)
+
     n = num_dominos * 4
     region_sizes = [1, 2, 3, 4]
     board = create_board_shape(num_dominos)
     regions = get_regions(board, region_sizes)
-    set_equality_constraints(regions)
-    cell_value_board = assign_cell_values(regions, n)
-    add_constraints(regions, cell_value_board)
+    set_equality_constraints(regions, eq_prob)
+    cell_value_board = assign_cell_values(regions, n, min_pip, max_pip)
+    add_constraints(regions, cell_value_board, constraints, probs)
     valid_dominos = get_dominos(regions, cell_value_board, n)
     return Puzzle(num_dominos, regions, valid_dominos)
 
@@ -235,8 +254,10 @@ def truncate_board(regions, n):
     return trunc_n, first_r, first_c
 
 
-def encode():
-    puzzle = create_puzzle(20, [1, 2, 3, 4, 5])
+def encode(
+    num_dominos, region_sizes, constraints=None, probs=None, min_pip=0, max_pip=6
+):
+    puzzle = create_puzzle(num_dominos, region_sizes, constraints, probs)
     regions = puzzle.regions
     valid_dominos = puzzle.valid_dominos
     num_dominos = puzzle.num_dominos
@@ -259,12 +280,12 @@ def encode():
 
 
 def print_puzzle():
-    print(encode())
+    print(encode(20, [1, 2, 3, 4, 5]))
 
 
 def write_puzzle(path):
     with open(path, "w") as f:
-        f.write(encode())
+        f.write(encode(20, [1, 2, 3, 4, 5]))
 
 
 write_puzzle("text.txt")

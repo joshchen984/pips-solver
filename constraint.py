@@ -1,20 +1,25 @@
 import random
 from abc import ABC
 
+
+def all_constraints():
+    return [Eq, Neq, Sum, Lt, Gt, NoConstraint]
+
+
 class Constraint(ABC):
     @classmethod
-    def create(cls, region_sum = None):
+    def create(cls, region_sum=None):
         return cls()
 
     @classmethod
-    def create_random(cls, region_sum, constraints = None, probs = None):
-        
+    def create_random(cls, region_sum, constraints, probs=None):
+
         if probs is None:
             return random.choice(constraints).create(region_sum)
         constraint = random.choices(constraints, weights=probs)[0]
         return constraint.create(region_sum)
 
-                      
+
 class Eq(Constraint):
     def __str__(self):
         return "EQ"
@@ -36,6 +41,7 @@ class Sum(Constraint):
     def __str__(self):
         return f"SUM {self.target}"
 
+
 class Lt(Constraint):
     def __init__(self, target):
         self.target = target
@@ -47,6 +53,7 @@ class Lt(Constraint):
     def __str__(self):
         return f"LT {self.target}"
 
+
 class Gt(Constraint):
     def __init__(self, target):
         self.target = target
@@ -57,6 +64,7 @@ class Gt(Constraint):
 
     def __str__(self):
         return f"GT {self.target}"
+
 
 class NoConstraint(Constraint):
     pass
