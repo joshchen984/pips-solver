@@ -127,6 +127,21 @@ def add_constraints(regions, cell_value_board, constraints=None, probs=None):
             region_sum = 0
             for r, c in region.cells:
                 region_sum += cell_value_board[r][c]
+            distinct = len(region.cells) == len(
+                {cell_value_board[r][c] for r, c in region.cells}
+            )
+            if not distinct:
+                if probs:
+                    filtered_constraints = [
+                        (c, p) for c, p in zip(constraints, probs) if constraints != Neq
+                    ]
+                    constraints, probs = zip(*filtered_constraints)
+                    constraints, probs = list(constraints), list(probs)
+                else:
+                    constraints = [c for c in constraints if c != Neq]
+                    if not constraints:
+                        # Only constraint is Neq but current region has duplicate pips
+                        constraints = [NoConstraint]
             region.constraint = Constraint.create_random(
                 region_sum, constraints=constraints, probs=probs
             )
