@@ -18,16 +18,6 @@ def empty_adjacent_cells(board, r, c):
     return adj
 
 
-def get_edge_cells(board):
-    n = len(board)
-    edges = set()
-    for i in range(n):
-        for j in range(n):
-            if board[i][j]:
-                edges.update(empty_adjacent_cells(board, i, j))
-    return edges
-
-
 def create_board_shape(num_dominos):
     n = num_dominos * 4
     board = [[False for _ in range(n)] for _ in range(n)]
@@ -35,10 +25,13 @@ def create_board_shape(num_dominos):
     # initial domino
     board[n // 2][n // 2] = True
     board[n // 2][n // 2 - 1] = True
+    edges = set()
+    edges.update(empty_adjacent_cells(board, n // 2, n // 2))
+    edges.update(empty_adjacent_cells(board, n // 2, n // 2 - 1))
 
     dominos_fit = 1
     while dominos_fit < num_dominos:
-        edge_cells = list(get_edge_cells(board))
+        edge_cells = list(edges)
         (r, c) = random.choice(edge_cells)
         empty_adj = empty_adjacent_cells(board, r, c)
         if empty_adj:
@@ -47,6 +40,10 @@ def create_board_shape(num_dominos):
             board[r2][c2] = True
             dominos.append(((r, c), (r2, c2)))
             dominos_fit += 1
+            edges.update(empty_adj)
+            edges.update(empty_adjacent_cells(board, r2, c2))
+            edges.remove((r, c))
+            edges.remove((r2, c2))
     return board, dominos
 
 
@@ -149,7 +146,7 @@ def add_constraints(regions, cell_value_board, constraints=None, probs=None):
             )
 
 
-def get_dominos(domino_positions, cell_value_board, n):
+def get_dominos(domino_positions, cell_value_board):
     valid_dominos = []
     for (r1, c1), (r2, c2) in domino_positions:
         valid_dominos.append((cell_value_board[r1][c1], cell_value_board[r2][c2]))
@@ -189,7 +186,7 @@ def create_puzzle(
     set_equality_constraints(regions, eq_prob)
     cell_value_board = assign_cell_values(regions, n, min_pip, max_pip)
     add_constraints(regions, cell_value_board, constraints, probs)
-    valid_dominos = get_dominos(domino_positions, cell_value_board, n)
+    valid_dominos = get_dominos(domino_positions, cell_value_board)
     return Puzzle(num_dominos, regions, valid_dominos)
 
 
