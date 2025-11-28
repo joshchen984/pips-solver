@@ -193,18 +193,18 @@ def create_puzzle(
 def encode_board(regions, n, first_r, first_c):
     lines = []
     board = [["." for _ in range(n)] for _ in range(n)]
-    for i, region in enumerate(regions):
+    cur_constraint = 0
+    for region in regions:
         for r, c in region.cells:
             if type(region.constraint) is NoConstraint:
                 board[r - first_r][c - first_c] = "#"
             else:
-                board[r - first_r][c - first_c] = chr(i + ord("A"))
+                board[r - first_r][c - first_c] = str(cur_constraint)
+        if type(region.constraint) is not NoConstraint:
+            cur_constraint += 1
 
     for i in board:
-        line = []
-        for j in i:
-            line.append(j)
-        lines.append("".join(line))
+        lines.append(" ".join(i))
     return "\n".join(lines)
 
 
@@ -248,9 +248,11 @@ def encode(
         1 for region in regions if type(region.constraint) is not NoConstraint
     )
     lines.append(str(num_constraints))
-    for i, region in enumerate(regions):
+    cur_constr = 0
+    for region in regions:
         if type(region.constraint) is not NoConstraint:
-            lines.append(chr(ord("A") + i) + " " + str(region.constraint))
+            lines.append(str(cur_constr) + " " + str(region.constraint))
+            cur_constr += 1
     lines.append(str(num_dominos))
     for domino in valid_dominos:
         lines.append(f"{domino[0]} {domino[1]}")
