@@ -73,6 +73,42 @@ We chose OR-Tools CP-SAT since it has a natural match to the problem sucture (co
 
 Overall, expressing Pips as a CP-SAT model gives us a clear separation between puzzle logic (encoded as constraints) and search strategy (delegated to the solver), and provides a solid baseline before layering on additional heuristics like equality-first branching or static domain pruning.
 
+### Challenges:
+#### **1. Dynamic Pruning (Failed Attempt)**
+Our early idea was to prune search branches *during solving* by enforcing constraints like:
+- If partial region sum exceeds LT target → prune immediately  
+- If remaining max possible sum cannot reach SUM target → prune  
+- If remaining minimum sum exceeds GT target → prune  
+BUT CP-SAT does not allow access to partial assignments or dynamic domain inspection.
+Thus we could not implement true branch-and-bound pruning. This forced us to adopt **static pruning**, applied *before* constraints are given to the solver, and this luckily improved our solving time.
+However, we ultimately abandoned LS for **two major reasons**.
+#### **2. Attempt to Use Local Search**
+We explored replacing or augmenting CP-SAT with **local search (LS)** methods because:
+- It naturally supports **incremental improvements** rather than full satisfaction modeling  
+- It can exploit the spatial structure of dominos and regions  
+- It is not limited by CP-SAT’s lack of dynamic pruning
+However, we realized this would be too complex for two main reasons.
+1. **Defining a Valid Neighborhood Was Far More Complex Than Expected**
+A valid LS neighbor requires:
+1. A legal tiling of dominos  
+2. Domino orientation consistency  
+3. Region constraints remaining satisfied or at least not severly violated  
+4. Pip consistency tied to the specific allowed domino pairs  
+However, we discovered the obstacles that:
+- Any change to a single domino can invalidate 2–6 adjacent dominos, causing cascading conflicts.
+- Rotating or swapping dominos often creates uncovered cells or overlaps, which LS is not equipped to correct cleanly.
+- Simple “swap two dominos” cannot discover all possible geometric orientations.
+- Generating legal neighbors required reconstructing almost the entire board, defeating the purpose of LS's incremental approach.
+2. **Local Search Cannot Guarantee Feasibility**
+Pips puzzles require **exact constraint satisfaction**:
+- SUM regions must match exactly  
+- LT/GT constraints impose strict inequalities  
+- Equality regions must all share the same pip value  
+- Only specific domino pip-pairs are allowed  
+LS, unless heavily guided, can get stuck in infeasible solutions where many constraints are still not fully met, especially with many different geometric orientations of dominos in the puzzle.
+
+**Overall, since our baseline model was already pretty fast, we stuck to making preprocessing-based improvements to this using various heuristics**.
+
 ## Solver Analysis for different implementations
 In our project, we developed three CP-SAT–based solvers for Pips puzzles. Each solver targets a different performance need and applies different levels of preprocessing and guided search.
 ### 1. `solve_pips` — The Baseline Solver 
@@ -98,13 +134,74 @@ Examples:
 - LT(region) = T → each cell must satisfy cell ≤ T.
 - GT(region) = T with small regions → infer minimum values if the region cannot exceed T otherwise.
 
+### Performance Analysis: Number of Dominos vs. Solver Runtime
+The following three plots compare how the **default solver**, the **equality-first heuristic solver**, and the **static pruning solver** scale with respect to the **number of dominos** in a puzzle. Each puzzle is auto-generated using the same parameters, ensuring comparable structure across solvers.
+
 ![alt text](/images/default_num_dominos.png)
 ![alt text](/images/equality_num_dominos.png)
 ![alt text](/images/pruning_num_dominos.png)
 
+Across all solvers, runtime increases roughly exponentially with the number of dominos.  
+This behavior is expected because as the board grows, region constraints, adjacency constraints, and pips domain interactions all multiply and the search space becomes combinatorially larger.
+
+1. Default Solver Behavior
+- Shows a smooth and predictable exponential growth curve.
+- Runtime remains under ~0.5s until ~20 dominos.
+- After ~30 dominos, growth becomes noticeably steeper.
+- Spikes appear around 40–45 dominos, but overall variance is low.
+
+The default solver simply relies on CP-SAT’s internal branching heuristics and learns constraints organically during search.  
+
+2. Equality Heuristic Solver Behavior
+- Runtime for small cases is comparable to (sometimes faster than) the default solver.
+- Variance increases dramatically for puzzles above ~30 dominos.
+- Sharp peaks (2–3s) occur more frequently than in the baseline solver.
+This could be because when equality regions are common, propagation is strong and the solver finishes quickly, but when equality regions are rare, the solver becomes suboptimal since it still spends preprocessing time counting the number of each pip value even when unnecessary.
+
+3. Pruning Heuristic Solver Behavior (Static Domain Reduction + AddHint)
+- Best overall scaling among the three solvers.
+- Lower variance: runtime rises steadily without the large spikes seen in the equality solver.
+- Maintains a noticeable speedup (roughly 10–15%) over the default solver at higher domino counts.
+- Peaks are smaller, often staying below ~2.5s even for 50 dominos (compared to 3s for other solvers)
+This solver applies static preprocessing and added hints to motivate the checking of certain regions earlier, allowing infeasible domains to be pruned earlier. Therefore, it makes sense that it may have better performance on average.
+
+**Overall, we see that the pruning heuristic performs the best as the puzzle size increases**
+
+### Constraint-Type Performance Analysis
+
+This section analyzes the performance characteristics of the **Default Solver**, the **Equality Heuristic Solver**, and the **Pruning Heuristic Solver** when puzzles are restricted to *only one type of region constraint* at a time.  
+
 ![alt text](/images/default_constraint_type.png)
 ![alt text](/images/equality_constraint_type.png)
 ![alt text](/images/pruning_constraint_type.png)
+
+1. Default Solver Behavior
+- **EQ, NEQ, and SUM** constraints all run very quickly (≈0.23–0.28s).
+- **LT** is the slowest by a noticeable margin: **~0.34s**.
+- **GT** is slightly slower than SUM, but still significantly faster than LT.
+- **NoConstraint** (regions with no constraint) is the fastest case overall (~0.21s).
+
+This makes sense since LT constraints allow for a wide range of feasible assignments and therefore may have the weakest propagation. EQ and NEQ are stricter and therefore can quickly prune branches/reduce domain width. Clearly, the no-constraint region is the fastest to solve since dominos can be placed in any order.
+
+Overall, The default solver performs **best on highly structured regions** (EQ/NEQ) and **worst on underconstrained LT regions**, where its search space expands significantly.
+
+2. Equality Heuristic Solver Behavior
+- EQ and NEQ remain fast (≈0.23–0.24s).
+- SUM behaves very similarly (~0.24s).
+- LT and GT again show the slowest runtimes (0.30–0.31s).
+- NoConstraint stays around ~0.22s.
+
+We noticed that this doesn't change the speed significantly of puzzles with onnly equality puzzles, but can affect the running time of other puzzle types. This could be related to the preprocessing time of counting pip values.
+
+3. Pruning Heuristic Solver Behavior (Static Domain Reduction + AddHint)
+- EQ, NEQ, SUM remain fast (≈0.22–0.24s).
+- LT and GT are again the slowest (~0.30–0.34s).
+- NoConstraint remains the fastest (≈0.21–0.22s).
+
+Static pruning improves performance uniformly, but does not eliminate the inherent complexity differences between constraint types. This did not have a major effect on puzzles limited only to Equality or NEQ, but increased performance on SUM compared to the other solvers. This could be because many generated SUM regions seen are small, and this preprocessing may allow the solver to set the value of those SUM regions initially, therefore pruning the search space. However, this increased the running time of puzzles limited to only Gt constraints, which was unexpected.
+
+**Overall, the pruning solver improves solve times uniformly, but constraint type still dominates performance behavior.**
+**Weak constraints (LT, GT) inherently hurt propagation and therefore remain the slowest, even with pruning applied.**
 
 ## Code Explanation:
 The `create_puzzle.py` file has code designed to autogenerate multiple pips puzzles (with parameters such as size, number of dominos, max pip value), which we use in benchmarking. Our main file is `PipsSolver.ipynb`, which contains the puzzle parsing logic, creation of the CP-SAT model, and implementation of heuristics. This file is complete with thorough markdown annotations throughout.
