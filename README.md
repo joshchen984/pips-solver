@@ -159,4 +159,4 @@ sol, solver = solve_pips(n, board, constraints, dominos)
 solution_path = os.path.join(RESULT_DIR, f"solution_{i}.txt")
 write_solution_file(solution_path, board, sol)
 ```
-That's it!
+Note that the `solve_pips` can also be replaced by `solve_pips_equality` or `solve_pips_pruning` if you would prefer to run the model with a specific heuristic, but otherwise, that's it!
